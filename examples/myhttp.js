@@ -3,8 +3,8 @@
 var sys = require("sys");
 var http = require("http");
 var url = require("url");
-var client = require("mysql/client");
-var pool = require("mysql/pool").pool;
+var client = require("../mysql");
+var pool = require("../mysql/pool").pool;
 
 process.addListener('uncaughtException', function(err) { sys.p(err); });
 

@@ -19,7 +19,7 @@ Asynchronous Mysql client module for Nodejs, written in JavaScript. No other mys
 
 Output might be:
 
-    [ 
+    [
       { id: 1, username: 'adam' }
     , { id: 2, username: 'aston' }
     ]
