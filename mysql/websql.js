@@ -1,6 +1,6 @@
 // wrappers to provide WebSql-alike interface to mysql
 
-var createTCPClient = require('./client').createTCPClient;
+var createTCPClient = require('./index').createTCPClient;
 var sys = require('sys');
 
 function transaction(connection)
@@ -19,7 +19,7 @@ transaction.prototype.executeSql = function (query, args, rsCallback, errorCallb
     var execCmd = this.connection.execute(query, args);
     var results = {};
     results.rows = [];
-    this.connection.row_as_hash = true;
+    this.connection.rowAsHash = true;
     execCmd.addListener('row', function(r) {
         results.rows.push(r);
     });
@@ -41,7 +41,7 @@ exports.openDatabase = function(db, user, password)
     var connection = createTCPClient();
     connection.auth(db, user, password);
     connection.query('SET autocommit=0;');
-    connection.auto_prepare = true;
+    connection.autoPrepare = true;
     webdb.transaction = function(txCreated, txError)
     {
         var t = new transaction(connection);

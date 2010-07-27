@@ -11,7 +11,7 @@ process.addListener('uncaughtException', function(err) { sys.p(err); });
 function test_datasource()
 {
    var db = client.createTCPClient(); 
-   db.auto_prepare = true;
+   db.autoPrepare = true;
    db.auth("test", "testuser", "testpass");
    return db;
 }

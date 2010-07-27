@@ -94,7 +94,6 @@ function reader(data)
 {
    this.data = data;
    this.pos = 0;
-
 }
 
 // deserialise mysql binary field
@@ -142,22 +141,29 @@ reader.prototype.num = function(numbytes)
 
 reader.prototype.field = function()
 {
-   var field = {};
-   field.catalog = this.lcstring();
-   field.db = this.lcstring();
-   field.table = this.lcstring();
-   field.org_table = this.lcstring();
-   field.name = this.lcstring();
-   field.org_name = this.lcstring();
-   field.filler = this.num(1);
-   field.charsetnum = this.num(2);
-   field.length = this.num(4);
-   field.type = this.num(1);
-   field.flags = this.num(2);
-   field.decimals = this.num(1);
-   field.filler = this.num(2);
-   field.defval = this.lcstring();
-   return field;
+  var field = {
+    catalog: this.lcstring(),
+    db: this.lcstring(),
+    table: this.lcstring(),
+    org_table: this.lcstring(),
+    name: this.lcstring(),
+    org_name: this.lcstring(),
+    charsetnum: 0,
+    length: 0,
+    type: 0,
+    flags: 0,
+    decimals: 0,
+    defval: 0,
+  };
+  this.skip(1);
+  field.charsetnum = this.integer(2);
+  field.length = this.integer(4);
+  field.type = this.integer(1);
+  field.flags = this.integer(2);
+  field.decimals = this.integer(1);
+  this.skip(2);
+  field.defval = this.lcstring();
+  return field;
 }
 
 function binary(n)
@@ -176,92 +182,98 @@ function binary(n)
     return res;
 }
 
-reader.prototype.zstring = function()
-{
-   var res = "";
-   var c;
-   while(c = this.data.charCodeAt(this.pos++))
-   {
-       res += String.fromCharCode(c);
-   }
-   return res;
+reader.prototype.zstring = function() {
+  var res = "";
+  var c;
+  while(c = this.data.charCodeAt(this.pos++)) {
+    res += String.fromCharCode(c);
+  }
+  return res;
 }
 
-reader.prototype.lcstring = function()
-{
-    var len = this.lcnum();
-    var res = this.bytes(len);
-    return res;
+reader.prototype.lcstring = function() {
+  var len = this.lcnum();
+  var res = this.bytes(len);
+  return res;
 }
 
-reader.prototype.isEOFpacket = function()
-{
-    return this.data.charCodeAt(0) == 254 && this.data.length < 9
+reader.prototype.isEOFpacket = function() {
+  return this.data.charCodeAt(0) == 254 && this.data.length < 9
 }
 
-reader.prototype.eof = function()
-{
-    return this.pos >= this.data.length;
+reader.prototype.eof = function() {
+  return this.pos >= this.data.length;
 }
 
-reader.prototype.tail = function()
-{
-    var res = this.data.substr(this.pos, this.data.length - this.pos);
-    this.pos = this.data.length;
-    return res;
+reader.prototype.tail = function() {
+  var res = this.data.substr(this.pos, this.data.length - this.pos);
+  this.pos = this.data.length;
+  return res;
 }
 
-reader.prototype.isErrorPacket = function()
-{
-    return this.data.charCodeAt(0) == 0xff;
+reader.prototype.isErrorPacket = function() {
+  return this.data.charCodeAt(0) === 0xff;
 }
 
-reader.prototype.readOKpacket = function()
-{
-   var res = {};
-   res.field_count = this.data.charCodeAt(this.pos++);
-   if (res.field_count == 0xff) // error
-   {
-       res.errno = this.data.charCodeAt(this.pos) + (this.data.charCodeAt(this.pos+1)<<8);
-       this.pos += 8;
-       //this.pos++; // skip sqlstate marker, "#"
-       //res.sqlstate = this.bytes(5);
-   } else {
-       res.affected_rows = this.lcnum();
-       res.insert_id = this.lcnum();
-       res.server_status = this.num(2);
-       res.warning_count = this.num(2);
-   }
-   res.message = this.tail();
-   return res;
+reader.prototype.readOKpacket = function() {
+  var res = {};
+  res.field_count = this.data.charCodeAt(this.pos++);
+  if (res.field_count === 0xff) {
+    // error
+    res.errno = this.data.charCodeAt(this.pos) + (this.data.charCodeAt(this.pos+1)<<8);
+    this.pos += 8;
+    //this.pos++; // skip sqlstate marker, "#"
+    //res.sqlstate = this.bytes(5);
+  } else {
+    res.affected_rows = this.lcnum();
+    res.insert_id = this.lcnum();
+    res.server_status = this.num(2);
+    res.warning_count = this.num(2);
+  }
+  res.message = this.tail();
+  return res;
 }
 
-reader.prototype.lcnum = function()
-{
-   var b1 = this.data.charCodeAt(this.pos);
-   this.pos++;
-   return b1;
+reader.prototype.lcnum = function() {
+  var b1 = this.data.charCodeAt(this.pos);
+  this.pos++;
+  return b1;
 }
 
-reader.prototype.readPacketHeader = function()
-{
-   var res = { length: 0, packetNum:0 };
-   res.length += this.data.charCodeAt(0);
-   res.length += this.data.charCodeAt(1) << 8;
-   res.length += this.data.charCodeAt(2) << 16;
-   res.packetNum = this.data.charCodeAt(3);
-   this.pos += 4;
-   return res;
+reader.prototype.readPacketHeader = function() {
+  var res = { length: 0, packetNum:0 };
+  res.length += this.data.charCodeAt(0);
+  res.length += this.data.charCodeAt(1) << 8;
+  res.length += this.data.charCodeAt(2) << 16;
+  res.packetNum = this.data.charCodeAt(3);
+  this.pos += 4;
+  return res;
+}
+
+reader.prototype.skip = function(nbytes) {
+  this.pos += nbytes;
+}
+
+reader.prototype.integer = function(n) {
+  var d = 0;
+  var end = this.pos+n;
+  for (var i=0;i<n;i++) {
+    if (this.pos === end)
+      return NaN; // too few bytes
+    var v = this.data.charCodeAt(this.pos++);
+    if (i) v = v << (8 * i);
+    d += v;
+  }
+  return d;
 }
 
 reader.prototype.bytes = function(n)
 {
    var res = "";
    var end = this.pos+n;
-   while(this.pos < end)
-   {
-       res += this.data.charAt(this.pos);
-       this.pos++;
+   while(this.pos < end) {
+     res += this.data.charAt(this.pos);
+     this.pos++;
    }
    return res;
 }

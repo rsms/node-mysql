@@ -2,7 +2,7 @@
 
 var sys = require("sys");
 var db = require("mysql/client").createTCPClient(); // localhost:3306 by default
-db.auto_prepare = true;
+db.autoPrepare = true;
 function dump_rows(cmd)
 {
    cmd.addListener('row', function(r) { sys.puts("row: " + sys.inspect(r)); } );

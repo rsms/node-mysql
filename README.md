@@ -1,24 +1,30 @@
-Mysql client module for node.js, written in JavaScript. No other mysql runtime required.
+# node-mysql
 
-simple example:
+Asynchronous Mysql client module for Nodejs, written in JavaScript. No other mysql runtime required.
 
-var db = require("mysql/client").createTCPClient(); // localhost:3306 by default
-db.auto_prepare = true;
-function dump_rows(cmd)
-{
-   cmd.addListener('row', function(r) { sys.puts("row: " + sys.inspect(r)); } );
-}
+## Simple example
 
-db.auth("test", "testuser", "testpass");
-dump_rows(db.query("select 1+1,2,3,'4',length('hello')"));
-dump_rows(db.execute("select 1+1,2,3,'4',length(?)", ["hello"]));
-db.close();
+    var conf = {
+      database: 'foo',
+      user: 'foo',
+      password: 'secret',
+    }
+    mysql.openDatabase(conf, function(err, db){
+      db.exec('SELECT * FROM users WHERE name LIKE ?', ['A%'], function(err, r){
+        if (err) throw err;
+        sys.puts(sys.inspect(r.rows));
+      });
+      db.close();
+    });
 
-otput is:
-row: [ 2, 2, 3, "4", 5]
-row: [ 2, 2, 3, "4", 5]
+Output might be:
 
-highlights:
+    [ 
+      { id: 1, username: 'adam' }
+    , { id: 2, username: 'aston' }
+    ]
+
+## Highlights
 
 - commands are pipelined
 - types are converted mysql<->javascript according to field type
@@ -26,64 +32,105 @@ highlights:
 - row packet ( query ) and binary row packet ( execute ) handled transparently equal
 
 
-== API:
+## API
 
-mysql/client:
+### Overview
 
-createClient(socket) -  create client from duplex stream (TODO: add default path to local server socket)
-createTCPClient(host, port) - create tcp client, default host 127.0.0.1, port 3306
+- `openDatabase(options, callback(err, db)) -> Database` -- equivalent to: `new Database().open(options, callback)`.
+- `new Database()` -- a new Database object.
+  - `.open(options[, callback]) -> Command` -- connect and authenticate.
+  - `.transaction(oncreate(tx)[, onerror(err)]) -> this` -- execute statements in a transaction (built up in the `oncreate` handler).
+  - `.query(sql[, callback(err, results)]) -> Command` -- raw query.
+  - `.exec(sql, [args,] [callback(err, results)]) -> Command` -- execute a statement.
+  - `.close([callback]) -> Command` -- close the connection.
+- `new Transaction(database)` -- a new (unusable) Transaction object. Use `Database.prototype.transaction` to create a new (usable) transaction object.
+  - `.exec(sql, [args,] [callback(err, results)]) -> Command` -- execute a statement.
 
-client.auth
-client.query
-client.prepare
-client.execute
-client.close - create and enqueue corresponding command
-client.execute also adds prepare command if there is no cached statement and client.auto_prepare set to true (TODO: add better api than client.auto_prepare flag)
+### Overview of the lower-level API
 
-client.terminate - close conection immediately
+- `createTCPClient(host, port) -> SocketClient` -- create a new TCP client.
+- `new SocketClient(connection)` -- a client which will use `connection` to communicate.
+  - `.auth`
+  - `.query`
+  - `.prepare`
+  - `.execute`
+  - `.close` - create and enqueue corresponding command
+  - `.execute` also adds prepare command if there is no cached statement and the property `autoPrepare` set to true.
+  - `SocketClient.prototype.terminate` - close conection immediately
 
-=== commands:
-All commands fire 'end'() event at the end of command executing.
 
-- auth(user, pass, db) - perform mysql connection handshake. Should be always a first command (TODO: add default user/pass if missing?).
+### Commands
+
+All commands fire "end" event at the end of command executing.
+
+#### auth(user, pass, db)
+
+Perform mysql connection handshake. Should be always a first command. User and password can be a false value (e.g. `null`) in which case the empty string (`""`) will be used.
+
 Events:
-    'authirized'(serverStatus) event. 
 
-- query(sql) - sumple query.
+- `authorized(serverStatus)`
+
+#### query(sql)
+
+Simple query.
+
 Events:
-    'field'(field) - one for each field description
-    'fields_eof'() - after last field
-    'row'(rows) - array of field values, fired for each row in result set
 
-- client.prepre(sql) - prepare a statement and store result in client.pscache
+- `field(field)` - one for each field description
+- `fields_eof()` - after last field
+- `row(rows)` - array of field values, fired for each row in result set
+
+#### client.prepre(sql)
+
+Prepare a statement and store result in client.pscache
+
 Events:
-    'prepared'(preparedStatement)
-    'parameter'(field) - input parameter description
 
-- execute(sql, parameters) - parameters is an array of values. Known types are sent in appropriate mysql binary type (TODO: currently this is not true, type is always string and input converted using param.toString() )
-Events:
-   same as with query()
+- `prepared(preparedStatement)`
+- `parameter(field)` - input parameter description
 
-=== connection pool
+#### execute(sql, parameters)
 
-pool(createNewConnectionCallback, minConnections) - create a new pool, spawn minConnections at start using createNewConnectionCallback. One should usually call auth command on a new connection before returning it. 
-pool.get( connectionAvailableCallback ) - calls connectionAvailableCallback when there is connection with queue length < pool.maxQueue.
+Parameters is an array of values. Known types are sent in appropriate mysql binary type.
 
-parameters:
-   pool.minConnections
-   pool.maxConnections
-   pool.maxQueue
-   pool.maxWaiters 
+> TODO: currently this is not true, type is always string and input converted using param.toString().
 
-TODO:
+Events (same as for `query()`):
 
-- buffers 
+- `field(field)` - one for each field description
+- `fields_eof()` - after last field
+- `row(rows)` - array of field values, fired for each row in result set
 
-LINKS:
 
-Mysql protocol documentation: 
-    http://forge.mysql.com/wiki/MySQL_Internals_ClientServer_Protocol
-Other node.js mysql clients: 
-    http://github.com/masuidrive/node-mysql
-    http://github.com/Sannis/node-mysql-libmysqlclient
-    http://github.com/Guille/node.dbslayer.js/ 
+### mysql/pool
+
+#### pool(createNewConnectionCallback, minConnections)
+
+Create a new pool, spawn minConnections at start using createNewConnectionCallback. One should usually call auth command on a new connection before returning it. 
+
+#### pool.get(connectionAvailableCallback)
+
+Calls connectionAvailableCallback when there is connection with queue `length < pool.maxQueue`.
+
+Properties:
+
+- `minConnections`
+- `maxConnections`
+- `maxQueue`
+- `maxWaiters`
+
+## TODO:
+
+- Use node Buffers (8-bit) instead of text string
+- Support for transparent reconnect after server resets connection (the 3600 sec server timeout)
+
+## Related
+
+- Mysql protocol documentation:
+  - http://forge.mysql.com/wiki/MySQL_Internals_ClientServer_Protocol
+
+- Other Nodejs MySQL clients:
+  - http://github.com/masuidrive/node-mysql
+  - http://github.com/Sannis/node-mysql-libmysqlclient
+  - http://github.com/Guille/node.dbslayer.js/ 
